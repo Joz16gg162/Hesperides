@@ -931,6 +931,42 @@ class InterventionsIntegrationTest {
         assertThat(target.get("executions").get(0).get("executionDate").asString()).isEqualTo("2026-10-19");
         assertThat(target.get("executions").get(0).get("approvalDate").asString()).isEqualTo("2026-10-22");
     }
+    @Test void byZoneComplianceCountsAPlaceLinkedToThatSection() throws Exception {
+        var d=acceptedHistoryFixture();
+        long first=d.get("locations").get(0).get("id").asLong();
+        long zone=jdbc.queryForObject("select zone_id from intervention_locations where id=?",Long.class,first);
+        long place=jdbc.queryForObject("""
+            insert into places(name,kind_item_id,category_item_id,zone_id) values ('Lugar de prueba SPEC-101',
+              (select i.id from catalog_items i join catalog_types t on t.id=i.catalog_type_id where t.code='PLACE_KIND' and i.code='OUTDOOR'),
+              (select i.id from catalog_items i join catalog_types t on t.id=i.catalog_type_id where t.code='REFERENCE_CATEGORY' limit 1),
+              ?) returning id
+            """,Long.class,zone);
+        // La intervención se registró por lugar, sin sección propia: la sección sale del lugar.
+        jdbc.update("update intervention_locations set zone_id=null,place_id=? where id=?",place,first);
+        long config=jdbc.queryForObject("""
+            insert into maintenance_frequencies(activity_type_item_id,frequency_rule_type_item_id,regime,scope,zone_id,annual_target_count,valid_from)
+            values (?,(select i.id from catalog_items i join catalog_types t on t.id=i.catalog_type_id
+                where t.code='FREQUENCY_RULE_TYPE' and i.code='SEASONAL_PERIOD'),'IN_HOUSE','BY_ZONE',?,2,'2026-01-01') returning id
+            """,Long.class,typeId,zone);
+        var result=json.readTree(mvc.perform(get("/api/v1/maintenance/frequencies/compliance")
+            .with(user("planner@test.local").authorities(()->"ADMIN"))
+            .param("from","2026-10-19").param("to","2026-10-19").param("activityTypeItemId",Long.toString(typeId)))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsString()).get("data");
+        try {
+            JsonNode report=null;
+            for(var row:result)if(row.get("segments").get(0).get("evaluatedWithConfigId").asLong()==config)report=row;
+            assertThat(report).isNotNull();
+            var kinds=new java.util.ArrayList<String>();
+            for(var target:report.get("locations"))kinds.add(target.get("targetKind").asString());
+            assertThat(kinds).containsExactlyInAnyOrder("PLACE","ZONE");
+        } finally {
+            // El contenedor es compartido por la clase: una frecuencia vigente por sección
+            // que quedara aquí chocaría con la del otro test (índice único).
+            jdbc.update("update intervention_locations set place_id=null where id=?",first);
+            jdbc.update("delete from maintenance_frequencies where id=?",config);
+            jdbc.update("delete from places where id=?",place);
+        }
+    }
     @Test void historyKeepsPriorExecutionsAndDoesNotCountPartOfSameTargetBeforeItsFinalPiece() throws Exception {
         var d=acceptedHistoryFixture();long later=d.get("locations").get(1).get("id").asLong();
         jdbc.update("update intervention_locations set completed_at=timestamp '2026-10-21 03:00:00' where id=?",later);

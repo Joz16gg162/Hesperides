@@ -7,6 +7,8 @@
 > historial y segmentos locales. El segmento general no afirma cobertura de todo el campus.
 > Una regla CAMPUS_WIDE aplica su calendario a cada referencia atendida independientemente;
 > BY_ZONE filtra la sección explícita registrada, sin expansión a territorios vecinos.
+> Una intervención registrada por lugar cuenta para la sección a la que ese lugar está enlazado
+> (`places.zone_id`), de modo que BY_ZONE no depende de cómo se ubicó el trabajo.
 > BY_SECTOR queda sin evaluación territorial automática hasta disponer de correspondencia
 > histórica fiable. Solo puntos/elementos sin lugar/sección estable conservan los hechos,
 > pero no producen un veredicto local de frecuencia. Véase el informe T09 de SPEC-200.

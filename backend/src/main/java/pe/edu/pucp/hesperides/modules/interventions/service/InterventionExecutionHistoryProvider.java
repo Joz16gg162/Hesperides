@@ -39,7 +39,7 @@ public class InterventionExecutionHistoryProvider implements ExecutionHistoryPro
         if (!actor.isActive() || !actor.getRoleItem().isActive() || actor.getRoleItem().isDeleted()) throw new UnauthorizedException("Account unavailable");
         var zone = ZoneId.of(timeZone);
         var facts = jdbc.query("""
-            select i.id work_id,i.code,l.id location_id,l.attempt_number,l.zone_id,l.place_id,
+            select i.id work_id,i.code,l.id location_id,l.attempt_number,coalesce(l.zone_id,p.zone_id) zone_id,l.place_id,
                    l.completed_at,l.validated_at,a.approved_at,
                    coalesce(p.name,z.name,l.location_description,i.code) target_label
             from interventions i join catalog_items ps on ps.id=i.planning_status_item_id
